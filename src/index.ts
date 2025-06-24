@@ -7,6 +7,7 @@ export interface Config {
   groupManagement: {
     autoApprove: boolean
     useWhitelist: boolean
+    autoRejectNonWhitelist: boolean
     useKeywordFilter: boolean
     welcomeMessage: string
   }
@@ -24,6 +25,7 @@ export const Config: Schema<Config> = Schema.object({
   groupManagement: Schema.object({
     autoApprove: Schema.boolean().default(false).description('是否启用自动审批'),
     useWhitelist: Schema.boolean().default(true).description('是否启用白名单检查'),
+    autoRejectNonWhitelist: Schema.boolean().default(true).description('是否自动拒绝不在白名单中的申请'),
     useKeywordFilter: Schema.boolean().default(true).description('是否启用关键词过滤'),
     welcomeMessage: Schema.string().default('欢迎新朋友加入！请仔细阅读群公告。').description('欢迎消息')
   }).description('群组管理设置'),
@@ -79,6 +81,7 @@ export function apply(ctx: Context, config: Config) {
         '• whitelist.batch <QQ号列表> - 批量添加白名单',
         '• whitelist.remove <QQ号> - 移除白名单',
         '• whitelist.list - 查看白名单',
+        '• whitelist.reject-toggle - 切换自动拒绝功能',
         '',
         '🔑 关键词管理:',
         '• keywords - 查看关键词帮助',
@@ -123,11 +126,13 @@ export function apply(ctx: Context, config: Config) {
       if (config.whitelist.includes(userId)) {
         shouldApprove = true
         reason = '白名单用户'
-      } else {
-        // 用户不在白名单中，直接拒绝
+      } else if (config.groupManagement.autoRejectNonWhitelist) {
+        // 用户不在白名单中，且启用了自动拒绝
         shouldApprove = false
         reason = '不在白名单中'
       }
+      // 如果用户不在白名单中但未启用自动拒绝，则不设置 shouldApprove 和 reason
+      // 让后续的关键词过滤来决定
     }
 
     // 关键词过滤（如果申请消息包含内容）
@@ -137,12 +142,21 @@ export function apply(ctx: Context, config: Config) {
         shouldApprove = false
         reason = '包含拒绝关键词'
       } else if (config.approvalKeywords.some(keyword => message.includes(keyword))) {
-        // 只有当白名单未启用或用户在白名单中时，关键词才能覆盖决定
-        if (!config.groupManagement.useWhitelist || config.whitelist.includes(userId)) {
+        // 关键词过滤的处理逻辑
+        if (!config.groupManagement.useWhitelist) {
+          // 未启用白名单，关键词可以直接决定
+          shouldApprove = true
+          reason = '包含通过关键词'
+        } else if (config.whitelist.includes(userId)) {
+          // 用户在白名单中，关键词可以生效
+          shouldApprove = true
+          reason = '包含通过关键词'
+        } else if (!config.groupManagement.autoRejectNonWhitelist) {
+          // 用户不在白名单中，但未启用自动拒绝，关键词可以生效
           shouldApprove = true
           reason = '包含通过关键词'
         } else {
-          // 用户不在白名单中，即使有通过关键词也拒绝
+          // 用户不在白名单中，且启用了自动拒绝，关键词无效
           shouldApprove = false
           reason = '不在白名单中（关键词无效）'
         }
@@ -257,6 +271,9 @@ export function apply(ctx: Context, config: Config) {
         '',
         '📄 查看操作:',
         '• whitelist.list - 查看白名单列表',
+        '',
+        '⚙️ 配置操作:',
+        '• whitelist.reject-toggle - 切换自动拒绝功能',
         '',
         '📊 批量添加示例:',
         '• whitelist.batch 123,456,789',
@@ -501,6 +518,23 @@ export function apply(ctx: Context, config: Config) {
       return `✅ 已清空白名单 (移除了 ${count} 个QQ号)`
     })
 
+  ctx.command('whitelist.reject-toggle', '切换白名单自动拒绝功能')
+    .action(async () => {
+      config.groupManagement.autoRejectNonWhitelist = !config.groupManagement.autoRejectNonWhitelist
+      return [
+        `🔄 白名单自动拒绝功能已${config.groupManagement.autoRejectNonWhitelist ? '启用' : '禁用'}`,
+        '',
+        config.groupManagement.autoRejectNonWhitelist 
+          ? '✅ 现在不在白名单中的用户将被自动拒绝'
+          : '⚠️ 现在不在白名单中的用户将通过关键词过滤或默认规则处理',
+        '',
+        `当前配置:`,
+        `• 白名单检查: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
+        `• 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
+        `• 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`
+      ].join('\n')
+    })
+
   // 关键词管理命令
   ctx.command('keywords', '关键词管理')
     .action(async () => {
@@ -663,6 +697,7 @@ export function apply(ctx: Context, config: Config) {
         '',
         `🔄 自动审批: ${config.groupManagement.autoApprove ? '✅ 启用' : '❌ 禁用'}`,
         `📋 白名单检查: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
+        `🚫 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `🔑 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
         `📝 消息监控: ${config.messageMonitor.enabled ? '✅ 启用' : '❌ 禁用'}`,
         '',
@@ -701,6 +736,7 @@ export function apply(ctx: Context, config: Config) {
         '📊 功能模块状态:',
         `• 消息监控: ${config.messageMonitor.enabled ? '✅ 运行中' : '❌ 已禁用'}`,
         `• 白名单管理: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
+        `• 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `• 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
         `• 自动审批: ${config.groupManagement.autoApprove ? '✅ 启用' : '❌ 禁用'}`,
         '',
