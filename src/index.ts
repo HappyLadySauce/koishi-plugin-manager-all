@@ -119,9 +119,15 @@ export function apply(ctx: Context, config: Config) {
     let reason = ''
 
     // 白名单检查
-    if (config.groupManagement.useWhitelist && config.whitelist.includes(userId)) {
-      shouldApprove = true
-      reason = '白名单用户'
+    if (config.groupManagement.useWhitelist) {
+      if (config.whitelist.includes(userId)) {
+        shouldApprove = true
+        reason = '白名单用户'
+      } else {
+        // 用户不在白名单中，直接拒绝
+        shouldApprove = false
+        reason = '不在白名单中'
+      }
     }
 
     // 关键词过滤（如果申请消息包含内容）
@@ -131,9 +137,26 @@ export function apply(ctx: Context, config: Config) {
         shouldApprove = false
         reason = '包含拒绝关键词'
       } else if (config.approvalKeywords.some(keyword => message.includes(keyword))) {
-        shouldApprove = true
-        reason = '包含通过关键词'
+        // 只有当白名单未启用或用户在白名单中时，关键词才能覆盖决定
+        if (!config.groupManagement.useWhitelist || config.whitelist.includes(userId)) {
+          shouldApprove = true
+          reason = '包含通过关键词'
+        } else {
+          // 用户不在白名单中，即使有通过关键词也拒绝
+          shouldApprove = false
+          reason = '不在白名单中（关键词无效）'
+        }
       }
+    }
+
+    // 如果既没有启用白名单也没有启用关键词过滤，则默认行为
+    if (!config.groupManagement.useWhitelist && !config.groupManagement.useKeywordFilter) {
+      shouldApprove = true
+      reason = '无过滤规则，默认通过'
+    } else if (!reason) {
+      // 如果有过滤规则但没有匹配到任何条件
+      shouldApprove = false
+      reason = '未匹配任何通过条件'
     }
 
     try {
