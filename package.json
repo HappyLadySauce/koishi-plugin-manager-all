@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-manager-all",
   "description": "一个功能完整的 Koishi 群管机器人插件，支持白名单管理、关键词过滤和消息监控",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

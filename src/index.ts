@@ -9,7 +9,9 @@ export interface Config {
     useWhitelist: boolean
     autoRejectNonWhitelist: boolean
     useKeywordFilter: boolean
+    enableWelcome: boolean
     welcomeMessage: string
+    rejectionMessage: string
   }
   whitelist: string[]
   approvalKeywords: string[]
@@ -27,7 +29,9 @@ export const Config: Schema<Config> = Schema.object({
     useWhitelist: Schema.boolean().default(true).description('是否启用白名单检查'),
     autoRejectNonWhitelist: Schema.boolean().default(true).description('是否自动拒绝不在白名单中的申请'),
     useKeywordFilter: Schema.boolean().default(true).description('是否启用关键词过滤'),
-    welcomeMessage: Schema.string().default('欢迎新朋友加入！请仔细阅读群公告。').description('欢迎消息')
+    enableWelcome: Schema.boolean().default(true).description('是否启用入群欢迎消息'),
+    welcomeMessage: Schema.string().default('欢迎新朋友加入！请仔细阅读群公告。').description('欢迎消息'),
+    rejectionMessage: Schema.string().default('很抱歉，您的入群申请不符合要求。').description('拒绝消息')
   }).description('群组管理设置'),
   whitelist: Schema.array(String).default([]).description('QQ号白名单'),
   approvalKeywords: Schema.array(String).default(['朋友推荐', '学习交流']).description('自动通过关键词'),
@@ -91,6 +95,12 @@ export function apply(ctx: Context, config: Config) {
         '👥 群组管理:',
         '• group.info - 查看群组信息',
         '• group.config - 查看配置',
+        '',
+        '💬 消息管理:',
+        '• message - 查看消息管理帮助',
+        '• message.welcome.set <消息> - 设置欢迎消息',
+        '• message.welcome.toggle - 启用/禁用欢迎功能',
+        '• message.rejection.set <消息> - 设置拒绝消息',
         '',
         '🛠️ 其他功能:',
         '• ping - 测试响应',
@@ -187,7 +197,7 @@ export function apply(ctx: Context, config: Config) {
         logger.info(`自动通过入群申请: 用户 ${userId} (${reason})`)
         
         // 发送欢迎消息
-        if (config.groupManagement.welcomeMessage) {
+        if (config.groupManagement.enableWelcome && config.groupManagement.welcomeMessage) {
           setTimeout(async () => {
             try {
               await session.bot.sendMessage(guildId, config.groupManagement.welcomeMessage)
@@ -198,15 +208,18 @@ export function apply(ctx: Context, config: Config) {
         }
       } else if (reason) {
         // 拒绝申请
+        const rejectionMsg = config.groupManagement.rejectionMessage || '很抱歉，您的入群申请不符合要求。'
+        
         if (session.reject) {
-          await session.reject()
+          await session.reject(rejectionMsg)
         } else if (session.bot.handleGuildRequest) {
-          await session.bot.handleGuildRequest(messageId, false)
+          await session.bot.handleGuildRequest(messageId, false, rejectionMsg)
         } else if (session.bot.setGroupAddRequest) {
-          await session.bot.setGroupAddRequest(messageId, false)
+          await session.bot.setGroupAddRequest(messageId, false, rejectionMsg)
         }
         
         logger.info(`自动拒绝入群申请: 用户 ${userId} (${reason})`)
+        logger.info(`拒绝消息: ${rejectionMsg}`)
       } else {
         logger.info(`入群申请未自动处理: 用户 ${userId} (无匹配规则)`)
       }
@@ -240,7 +253,7 @@ export function apply(ctx: Context, config: Config) {
     const { guildId, userId } = session
     logger.info(`新成员加入: 群 ${guildId}, 用户 ${userId}`)
     
-    if (config.groupManagement.welcomeMessage) {
+    if (config.groupManagement.enableWelcome && config.groupManagement.welcomeMessage) {
       try {
         await session.send(h.at(userId) + ' ' + config.groupManagement.welcomeMessage)
       } catch (error) {
@@ -699,6 +712,7 @@ export function apply(ctx: Context, config: Config) {
         `📋 白名单检查: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `🚫 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `🔑 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
+        `💬 入群欢迎: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
         `📝 消息监控: ${config.messageMonitor.enabled ? '✅ 启用' : '❌ 禁用'}`,
         '',
         `📊 统计信息:`,
@@ -706,7 +720,8 @@ export function apply(ctx: Context, config: Config) {
         `• 通过关键词: ${config.approvalKeywords.length}`,
         `• 拒绝关键词: ${config.rejectionKeywords.length}`,
         '',
-        `💬 欢迎消息: ${config.groupManagement.welcomeMessage || '(未设置)'}`
+        `💬 欢迎消息: ${config.groupManagement.welcomeMessage || '(未设置)'}`,
+        `🚫 拒绝消息: ${config.groupManagement.rejectionMessage || '(未设置)'}`
       ].join('\n')
     })
 
@@ -727,6 +742,126 @@ export function apply(ctx: Context, config: Config) {
       return `📝 监控日志级别已设置为: ${level}`
     })
 
+  // 消息管理命令
+  ctx.command('message', '消息管理')
+    .action(async () => {
+      return [
+        '💬 消息管理命令:',
+        '',
+        '✅ 欢迎消息:',
+        '• message.welcome.set <消息> - 设置欢迎消息',
+        '• message.welcome.get - 查看当前欢迎消息',
+        '• message.welcome.toggle - 启用/禁用欢迎功能',
+        '',
+        '❌ 拒绝消息:',
+        '• message.rejection.set <消息> - 设置拒绝消息',
+        '• message.rejection.get - 查看当前拒绝消息',
+        '',
+        '📋 查看所有:',
+        '• message.list - 查看所有消息配置',
+        '',
+        `当前状态:`,
+        `• 欢迎功能: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
+        `• 欢迎消息: ${config.groupManagement.welcomeMessage ? '已设置' : '未设置'}`,
+        `• 拒绝消息: ${config.groupManagement.rejectionMessage ? '已设置' : '未设置'}`
+      ].join('\n')
+    })
+
+  ctx.command('message.welcome.set <msg:text>', '设置欢迎消息')
+    .action(async (_, msg) => {
+      if (!msg) {
+        return '❌ 请提供欢迎消息内容'
+      }
+
+      config.groupManagement.welcomeMessage = msg
+      return [
+        '✅ 欢迎消息已设置为:',
+        '',
+        `💬 ${msg}`,
+        '',
+        '新成员加入时将收到此消息。'
+      ].join('\n')
+    })
+
+  ctx.command('message.welcome.get', '查看当前欢迎消息')
+    .action(async () => {
+      if (!config.groupManagement.welcomeMessage) {
+        return '⚠️ 未设置欢迎消息'
+      }
+
+      return [
+        '💬 当前欢迎消息:',
+        '',
+        config.groupManagement.welcomeMessage
+      ].join('\n')
+    })
+
+  ctx.command('message.rejection.set <msg:text>', '设置拒绝消息')
+    .action(async (_, msg) => {
+      if (!msg) {
+        return '❌ 请提供拒绝消息内容'
+      }
+
+      config.groupManagement.rejectionMessage = msg
+      return [
+        '✅ 拒绝消息已设置为:',
+        '',
+        `💬 ${msg}`,
+        '',
+        '入群申请被拒绝时将显示此消息。'
+      ].join('\n')
+    })
+
+  ctx.command('message.rejection.get', '查看当前拒绝消息')
+    .action(async () => {
+      if (!config.groupManagement.rejectionMessage) {
+        return '⚠️ 未设置拒绝消息'
+      }
+
+      return [
+        '💬 当前拒绝消息:',
+        '',
+        config.groupManagement.rejectionMessage
+      ].join('\n')
+    })
+
+  ctx.command('message.list', '查看所有消息配置')
+    .action(async () => {
+      return [
+        '💬 所有消息配置:',
+        '',
+        '✅ 欢迎消息:',
+        `状态: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
+        `内容: ${config.groupManagement.welcomeMessage || '(未设置)'}`,
+        '',
+        '❌ 拒绝消息:',
+        config.groupManagement.rejectionMessage || '(未设置)',
+        '',
+        '💡 使用 message.welcome.set 和 message.rejection.set 来修改消息',
+        '💡 使用 message.welcome.toggle 来启用/禁用欢迎消息'
+      ].join('\n')
+    })
+
+  ctx.command('message.welcome.toggle', '切换入群欢迎消息功能')
+    .action(async () => {
+      config.groupManagement.enableWelcome = !config.groupManagement.enableWelcome
+      return [
+        `🔄 入群欢迎消息功能已${config.groupManagement.enableWelcome ? '启用' : '禁用'}`,
+        '',
+        config.groupManagement.enableWelcome 
+          ? '✅ 现在新成员加入时将收到欢迎消息'
+          : '❌ 现在新成员加入时不会收到欢迎消息',
+        '',
+        `当前配置:`,
+        `• 欢迎功能: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
+        `• 欢迎消息: ${config.groupManagement.welcomeMessage ? '已设置' : '未设置'}`,
+        '',
+        config.groupManagement.enableWelcome && !config.groupManagement.welcomeMessage
+          ? '⚠️ 提示: 请使用 message.welcome.set 设置欢迎消息内容'
+          : ''
+      ].filter(line => line !== '').join('\n')
+    })
+
   // 插件状态命令
   ctx.command('manager.status', '查看插件状态')
     .action(async () => {
@@ -738,6 +873,7 @@ export function apply(ctx: Context, config: Config) {
         `• 白名单管理: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `• 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
         `• 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
+        `• 入群欢迎: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
         `• 自动审批: ${config.groupManagement.autoApprove ? '✅ 启用' : '❌ 禁用'}`,
         '',
         '📈 数据统计:',
@@ -747,7 +883,9 @@ export function apply(ctx: Context, config: Config) {
         '',
         '🔧 配置信息:',
         `• 日志级别: ${config.messageMonitor.logLevel}`,
+        `• 欢迎功能: ${config.groupManagement.enableWelcome ? '启用' : '禁用'}`,
         `• 欢迎消息: ${config.groupManagement.welcomeMessage ? '已设置' : '未设置'}`,
+        `• 拒绝消息: ${config.groupManagement.rejectionMessage ? '已设置' : '未设置'}`,
         '',
         '📋 使用 help 命令查看完整功能列表'
       ].join('\n')
