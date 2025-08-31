@@ -55,7 +55,7 @@ export function apply(ctx: Context, config: Config) {
       const logData = {
         群组: guildId,
         用户: userId,
-        内容: content?.slice(0, 100) + (content?.length > 100 ? '...' : ''),
+        内容: content?.slice(0, 100) + (content && content.length > 100 ? '...' : ''),
         时间: new Date().toISOString()
       }
 

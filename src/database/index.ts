@@ -180,7 +180,7 @@ export class KoishiDatabaseService implements DatabaseService {
         }
       }
       return config
-    } catch (error) {
+    } catch (error: any) {
       logger.error('加载配置失败', error)
       return null
     }
@@ -194,7 +194,7 @@ export class KoishiDatabaseService implements DatabaseService {
         userId,
         addedAt: new Date()
       })
-    } catch (error) {
+    } catch (error: any) {
       // 忽略重复添加的错误
       if (!error.message?.includes('duplicate')) {
         throw error
@@ -224,7 +224,7 @@ export class KoishiDatabaseService implements DatabaseService {
         name: name.trim(),
         addedAt: new Date()
       })
-    } catch (error) {
+    } catch (error: any) {
       if (!error.message?.includes('duplicate')) {
         throw error
       }
@@ -254,7 +254,7 @@ export class KoishiDatabaseService implements DatabaseService {
         type: 'approval',
         addedAt: new Date()
       })
-    } catch (error) {
+    } catch (error: any) {
       if (!error.message?.includes('duplicate')) {
         throw error
       }
@@ -285,7 +285,7 @@ export class KoishiDatabaseService implements DatabaseService {
         type: 'rejection',
         addedAt: new Date()
       })
-    } catch (error) {
+    } catch (error: any) {
       if (!error.message?.includes('duplicate')) {
         throw error
       }
