@@ -11,26 +11,6 @@ export interface DatabaseService {
   saveConfig(guildId: string, config: Partial<Config>): Promise<void>
   loadConfig(guildId: string): Promise<Partial<Config> | null>
   
-  // 白名单管理
-  addToWhitelist(guildId: string, userId: string): Promise<void>
-  removeFromWhitelist(guildId: string, userId: string): Promise<void>
-  getWhitelist(guildId: string): Promise<string[]>
-  isInWhitelist(guildId: string, userId: string): Promise<boolean>
-  
-  // 姓名白名单管理
-  addToNameWhitelist(guildId: string, name: string): Promise<void>
-  removeFromNameWhitelist(guildId: string, name: string): Promise<void>
-  getNameWhitelist(guildId: string): Promise<string[]>
-  isNameInWhitelist(guildId: string, name: string): Promise<boolean>
-  
-  // 关键词管理
-  addApprovalKeyword(guildId: string, keyword: string): Promise<void>
-  removeApprovalKeyword(guildId: string, keyword: string): Promise<void>
-  getApprovalKeywords(guildId: string): Promise<string[]>
-  addRejectionKeyword(guildId: string, keyword: string): Promise<void>
-  removeRejectionKeyword(guildId: string, keyword: string): Promise<void>
-  getRejectionKeywords(guildId: string): Promise<string[]>
-  
   // 规则管理
   saveRule(guildId: string, rule: Rule): Promise<void>
   deleteRule(guildId: string, ruleId: string): Promise<void>
@@ -41,9 +21,6 @@ export interface DatabaseService {
 declare module 'koishi' {
   interface Tables {
     group_master_config: GroupMasterConfig
-    group_master_whitelist: GroupMasterWhitelist
-    group_master_name_whitelist: GroupMasterNameWhitelist
-    group_master_keywords: GroupMasterKeywords
     group_master_rules: GroupMasterRules
   }
 }
@@ -54,28 +31,6 @@ export interface GroupMasterConfig {
   configKey: string
   configValue: string
   updatedAt: Date
-}
-
-export interface GroupMasterWhitelist {
-  id: number
-  guildId: string
-  userId: string
-  addedAt: Date
-}
-
-export interface GroupMasterNameWhitelist {
-  id: number
-  guildId: string
-  name: string
-  addedAt: Date
-}
-
-export interface GroupMasterKeywords {
-  id: number
-  guildId: string
-  keyword: string
-  type: 'approval' | 'rejection'
-  addedAt: Date
 }
 
 export interface GroupMasterRules {
@@ -102,40 +57,6 @@ export class KoishiDatabaseService implements DatabaseService {
     }, {
       primary: 'id',
       unique: [['guildId', 'configKey']]
-    })
-
-    // QQ号白名单表
-    this.ctx.model.extend('group_master_whitelist', {
-      id: 'unsigned',
-      guildId: 'string(50)',
-      userId: 'string(20)',
-      addedAt: 'timestamp'
-    }, {
-      primary: 'id',
-      unique: [['guildId', 'userId']]
-    })
-
-    // 姓名白名单表
-    this.ctx.model.extend('group_master_name_whitelist', {
-      id: 'unsigned',
-      guildId: 'string(50)',
-      name: 'string(50)',
-      addedAt: 'timestamp'
-    }, {
-      primary: 'id',
-      unique: [['guildId', 'name']]
-    })
-
-    // 关键词表
-    this.ctx.model.extend('group_master_keywords', {
-      id: 'unsigned',
-      guildId: 'string(50)',
-      keyword: 'string(100)',
-      type: 'string(20)',
-      addedAt: 'timestamp'
-    }, {
-      primary: 'id',
-      unique: [['guildId', 'keyword', 'type']]
     })
 
     // 规则表
@@ -186,127 +107,6 @@ export class KoishiDatabaseService implements DatabaseService {
     }
   }
 
-  // QQ号白名单实现
-  async addToWhitelist(guildId: string, userId: string): Promise<void> {
-    try {
-      await this.ctx.database.create('group_master_whitelist', {
-        guildId,
-        userId,
-        addedAt: new Date()
-      })
-    } catch (error: any) {
-      // 忽略重复添加的错误
-      if (!error.message?.includes('duplicate')) {
-        throw error
-      }
-    }
-  }
-
-  async removeFromWhitelist(guildId: string, userId: string): Promise<void> {
-    await this.ctx.database.remove('group_master_whitelist', { guildId, userId })
-  }
-
-  async getWhitelist(guildId: string): Promise<string[]> {
-    const records = await this.ctx.database.get('group_master_whitelist', { guildId })
-    return records.map(r => r.userId)
-  }
-
-  async isInWhitelist(guildId: string, userId: string): Promise<boolean> {
-    const records = await this.ctx.database.get('group_master_whitelist', { guildId, userId })
-    return records.length > 0
-  }
-
-  // 姓名白名单实现
-  async addToNameWhitelist(guildId: string, name: string): Promise<void> {
-    try {
-      await this.ctx.database.create('group_master_name_whitelist', {
-        guildId,
-        name: name.trim(),
-        addedAt: new Date()
-      })
-    } catch (error: any) {
-      if (!error.message?.includes('duplicate')) {
-        throw error
-      }
-    }
-  }
-
-  async removeFromNameWhitelist(guildId: string, name: string): Promise<void> {
-    await this.ctx.database.remove('group_master_name_whitelist', { guildId, name: name.trim() })
-  }
-
-  async getNameWhitelist(guildId: string): Promise<string[]> {
-    const records = await this.ctx.database.get('group_master_name_whitelist', { guildId })
-    return records.map(r => r.name)
-  }
-
-  async isNameInWhitelist(guildId: string, name: string): Promise<boolean> {
-    const records = await this.ctx.database.get('group_master_name_whitelist', { guildId, name: name.trim() })
-    return records.length > 0
-  }
-
-  // 关键词管理实现
-  async addApprovalKeyword(guildId: string, keyword: string): Promise<void> {
-    try {
-      await this.ctx.database.create('group_master_keywords', {
-        guildId,
-        keyword: keyword.trim(),
-        type: 'approval',
-        addedAt: new Date()
-      })
-    } catch (error: any) {
-      if (!error.message?.includes('duplicate')) {
-        throw error
-      }
-    }
-  }
-
-  async removeApprovalKeyword(guildId: string, keyword: string): Promise<void> {
-    await this.ctx.database.remove('group_master_keywords', { 
-      guildId, 
-      keyword: keyword.trim(), 
-      type: 'approval' 
-    })
-  }
-
-  async getApprovalKeywords(guildId: string): Promise<string[]> {
-    const records = await this.ctx.database.get('group_master_keywords', { 
-      guildId, 
-      type: 'approval' 
-    })
-    return records.map(r => r.keyword)
-  }
-
-  async addRejectionKeyword(guildId: string, keyword: string): Promise<void> {
-    try {
-      await this.ctx.database.create('group_master_keywords', {
-        guildId,
-        keyword: keyword.trim(),
-        type: 'rejection',
-        addedAt: new Date()
-      })
-    } catch (error: any) {
-      if (!error.message?.includes('duplicate')) {
-        throw error
-      }
-    }
-  }
-
-  async removeRejectionKeyword(guildId: string, keyword: string): Promise<void> {
-    await this.ctx.database.remove('group_master_keywords', { 
-      guildId, 
-      keyword: keyword.trim(), 
-      type: 'rejection' 
-    })
-  }
-
-  async getRejectionKeywords(guildId: string): Promise<string[]> {
-    const records = await this.ctx.database.get('group_master_keywords', { 
-      guildId, 
-      type: 'rejection' 
-    })
-    return records.map(r => r.keyword)
-  }
 
   // 规则管理实现
   async saveRule(guildId: string, rule: Rule): Promise<void> {

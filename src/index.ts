@@ -4,8 +4,6 @@ import { ConfigSchema } from './config/schema'
 import { KoishiDatabaseService, DatabaseService } from './database'
 import { GroupRequestHandler } from './handlers/group-request'
 import { RuleEngine } from './handlers/rule-engine'
-import { WhitelistCommandHandler } from './commands/whitelist'
-import { NamesCommandHandler } from './commands/names'
 import { RulesCommandHandler } from './commands/rules'
 
 export const name = 'group-master'
@@ -37,13 +35,9 @@ export function apply(ctx: Context, config: Config) {
   const requestHandler = new GroupRequestHandler(ctx, config, database, ruleEngine)
 
   // 初始化命令处理器
-  const whitelistCommands = new WhitelistCommandHandler(ctx, config, database)
-  const namesCommands = new NamesCommandHandler(ctx, config, database)
   const rulesCommands = new RulesCommandHandler(ctx, config, database)
 
   // 注册命令
-  whitelistCommands.register()
-  namesCommands.register()
   rulesCommands.register()
 
   // 中间件：消息监控
@@ -63,10 +57,6 @@ export function apply(ctx: Context, config: Config) {
         logger.info('消息监控:', JSON.stringify(logData, null, 2))
       }
 
-      // 违规内容检测
-      if (content && config.rejectionKeywords.some(keyword => content.includes(keyword))) {
-        logger.warn(`检测到可疑内容: 群${guildId} 用户${userId} - ${content.slice(0, 50)}`)
-      }
     }
 
     // 特殊消息处理
@@ -79,28 +69,10 @@ export function apply(ctx: Context, config: Config) {
       const helpMessage = [
         '🤖 Group-Master 群管机器人',
         '',
-        '📋 QQ号白名单管理:',
-        '• whitelist - 查看QQ号白名单帮助',
-        '• whitelist.add <QQ号> - 添加单个QQ号白名单',
-        '• whitelist.batch <QQ号列表> - 批量添加QQ号白名单',
-        '• whitelist.remove <QQ号> - 移除QQ号白名单',
-        '• whitelist.list - 查看QQ号白名单',
-        '• whitelist.reject-toggle - 切换自动拒绝功能',
-        '',
-        '👤 姓名白名单管理:',
-        '• names - 查看姓名白名单帮助',
-        '• names.add <姓名> - 添加单个姓名',
-        '• names.batch <姓名列表> - 批量添加姓名',
-        '• names.remove <姓名> - 移除姓名',
-        '• names.list - 查看姓名白名单',
-        '• names.validation-toggle - 切换严格姓名验证模式',
-        '',
         '🔧 通用规则管理:',
         '• rules - 查看规则管理帮助',
         '• rules.list - 查看规则列表',
         '• rules.create - 创建新规则',
-        '• rules.preset.whitelist - 创建白名单规则',
-        '• rules.preset.names - 创建姓名验证规则',
         '• rules.preset.keywords <关键词> - 创建关键词规则',
         '',
         '👥 群组管理:',
@@ -177,28 +149,15 @@ export function apply(ctx: Context, config: Config) {
         '⚙️ 群管配置状态:',
         '',
         `🔄 自动审批: ${config.groupManagement.autoApprove ? '✅ 启用' : '❌ 禁用'}`,
-        `👤 严格姓名验证: ${config.groupManagement.useNameValidation ? '✅ 启用' : '❌ 禁用'}`,
-        `📋 QQ号白名单检查: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
-        `🚫 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
-        `🔑 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
         `💬 入群欢迎: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
         `📝 消息监控: ${config.messageMonitor.enabled ? '✅ 启用' : '❌ 禁用'}`,
         `💾 数据库存储: ${config.database.enabled ? '✅ 启用' : '❌ 禁用'}`,
         '',
-        `📊 统计信息:`,
-        `• QQ号白名单数量: ${config.whitelist.length}`,
-        `• 姓名白名单数量: ${config.nameWhitelist.length}`,
-        `• 通过关键词: ${config.approvalKeywords.length}`,
-        `• 拒绝关键词: ${config.rejectionKeywords.length}`,
-        '',
         `💬 消息配置:`,
         `• 欢迎消息: ${config.groupManagement.welcomeMessage || '(未设置)'}`,
         `• 拒绝消息: ${config.groupManagement.rejectionMessage || '(未设置)'}`,
-        `• 姓名验证失败消息: ${config.groupManagement.nameValidationMessage || '(未设置)'}`,
         '',
-        config.groupManagement.useNameValidation 
-          ? '🔥 当前启用严格姓名验证模式，只有白名单中的姓名才能通过！'
-          : '💡 可使用 names.validation-toggle 启用严格姓名验证模式'
+        '💡 使用通用规则系统来管理入群申请，通过 rules 命令查看和配置规则'
       ].join('\n')
     })
 
@@ -210,30 +169,18 @@ export function apply(ctx: Context, config: Config) {
         '',
         '📊 功能模块状态:',
         `• 消息监控: ${config.messageMonitor.enabled ? '✅ 运行中' : '❌ 已禁用'}`,
-        `• 严格姓名验证: ${config.groupManagement.useNameValidation ? '✅ 启用' : '❌ 禁用'}`,
-        `• QQ号白名单管理: ${config.groupManagement.useWhitelist ? '✅ 启用' : '❌ 禁用'}`,
-        `• 自动拒绝非白名单: ${config.groupManagement.autoRejectNonWhitelist ? '✅ 启用' : '❌ 禁用'}`,
-        `• 关键词过滤: ${config.groupManagement.useKeywordFilter ? '✅ 启用' : '❌ 禁用'}`,
         `• 入群欢迎: ${config.groupManagement.enableWelcome ? '✅ 启用' : '❌ 禁用'}`,
         `• 自动审批: ${config.groupManagement.autoApprove ? '✅ 启用' : '❌ 禁用'}`,
         `• 数据库存储: ${database ? '✅ 已连接' : '❌ 未启用'}`,
-        '',
-        '📈 数据统计:',
-        `• QQ号白名单: ${config.whitelist.length} 个`,
-        `• 姓名白名单: ${config.nameWhitelist.length} 个`,
-        `• 通过关键词: ${config.approvalKeywords.length} 个`,
-        `• 拒绝关键词: ${config.rejectionKeywords.length} 个`,
+        `• 通用规则引擎: ✅ 已加载`,
         '',
         '🔧 配置信息:',
         `• 日志级别: ${config.messageMonitor.logLevel}`,
         `• 欢迎功能: ${config.groupManagement.enableWelcome ? '启用' : '禁用'}`,
         `• 欢迎消息: ${config.groupManagement.welcomeMessage ? '已设置' : '未设置'}`,
         `• 拒绝消息: ${config.groupManagement.rejectionMessage ? '已设置' : '未设置'}`,
-        `• 姓名验证失败消息: ${config.groupManagement.nameValidationMessage ? '已设置' : '未设置'}`,
         '',
-        config.groupManagement.useNameValidation 
-          ? '🔥 当前严格姓名验证模式已启用'
-          : '💡 可启用严格姓名验证以实现更严格的入群管理',
+        '💡 使用 rules 命令查看和管理入群申请规则',
         '',
         '📋 使用 help 命令查看完整功能列表'
       ].join('\n')
@@ -313,8 +260,7 @@ export function apply(ctx: Context, config: Config) {
   logger.info('Group-Master 插件加载完成')
   logger.info('当前配置: ' + 
     '自动审批=' + config.groupManagement.autoApprove + ', ' +
-    '严格姓名验证=' + config.groupManagement.useNameValidation + ', ' +
-    'QQ号白名单=' + config.groupManagement.useWhitelist + ', ' +
-    '关键词过滤=' + config.groupManagement.useKeywordFilter + ', ' +
+    '入群欢迎=' + config.groupManagement.enableWelcome + ', ' +
+    '消息监控=' + config.messageMonitor.enabled + ', ' +
     '数据库=' + config.database.enabled)
 }

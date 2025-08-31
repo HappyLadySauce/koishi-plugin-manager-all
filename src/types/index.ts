@@ -1,19 +1,10 @@
 export interface Config {
   groupManagement: {
     autoApprove: boolean
-    useWhitelist: boolean
-    autoRejectNonWhitelist: boolean
-    useKeywordFilter: boolean
-    useNameValidation: boolean
     enableWelcome: boolean
     welcomeMessage: string
     rejectionMessage: string
-    nameValidationMessage: string
   }
-  whitelist: string[]
-  nameWhitelist: string[]
-  approvalKeywords: string[]
-  rejectionKeywords: string[]
   messageMonitor: {
     enabled: boolean
     logLevel: 'info' | 'warn' | 'error'
